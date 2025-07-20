@@ -88,15 +88,110 @@ def get_input_peer(peer_id: int, access_hash: int, peer_type: str):
 
     raise ValueError(f"Invalid peer type: {peer_type}")
 
+from typing import Tuple, List, Optional
 
-class SQLiteStorage(Storage):
+
+class State:
+    """
+    Represents the update state data model.
+
+    Attributes:
+        id (int): The ID of the state. (0 is me state)
+        pts (int): The PTS value.
+        date (int): The date value.
+        qts (int): The QTS value.
+        seq (int): The SEQ value.
+    """
+    def __init__(self, id: int, pts: int, date: int, qts: Optional[int],  seq: Optional[int]):
+        self.id = id 
+        self.pts = pts
+        self.date = date
+        self.qts = qts
+        self.seq = seq
+
+    @classmethod
+    def default(cls, id: int):
+        return cls(id, 1, int(time.time()), None, None)
+
+
+
+class StateMixin:
+    conn: sqlite3.Connection
+
+    def create_or_exists_table_state(self):
+        with self.conn:
+            self.conn.executescript("""
+                CREATE TABLE IF NOT EXISTS state (
+                    id   INTEGER PRIMARY KEY,
+                    pts  INTEGER,
+                    date INTEGER,
+                    qts  INTEGER,
+                    seq  INTEGER
+                )
+            """)
+
+    def get_state(self, id: int) -> State:
+        """
+        Fetch a specific state by ID from the database.
+        If the state is not found, a default state is returned.
+
+        Args:
+            id (int): The ID of the state to retrieve.
+
+        Returns:
+            Optional[State]: A State object if found, otherwise None.
+        """
+        query = "SELECT id, pts, date, qts, seq FROM state WHERE id = ?"
+        cursor = self.conn.execute(query, (id,))
+        row = cursor.fetchone()
+
+        if row is None:
+            return State.default(id)
+
+        return State(*row)
+
+    def update_state(self, id: int, pts: int, date: Optional[int], qts: Optional[int] = None,  seq: Optional[int] = None):
+        """
+        Insert or update a state entry using REPLACE INTO (upsert behavior).
+
+        Args:
+            id (int): The ID of the state.
+            pts (int): The PTS value.
+            date (int): The date value (e.g., Unix timestamp).
+            qts (int): The QTS value.
+            seq (int): The sequence number.
+        """
+        if date is None:
+            date = int(int(time.time()))
+        query = """
+            REPLACE INTO state (id, pts, date, qts, seq)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        self.conn.execute(query, (id, pts, date, qts, seq))
+        self.conn.commit()
+
+    def reset_state(self, id: int):
+        """
+        Reset a state entry by ID.
+        Instead of deleting the row, set pts = 1.
+
+        Args:
+            id (int): The ID of the state to reset.
+        """
+        query = "UPDATE state SET pts = 1 WHERE id = ?"
+        self.conn.execute(query, (id,))
+        self.conn.commit()
+
+
+
+class SQLiteStorage(Storage, StateMixin):
     VERSION = 3
     USERNAME_TTL = 8 * 60 * 60
 
+    conn: sqlite3.Connection
+
     def __init__(self, name: str):
         super().__init__(name)
-
-        self.conn = None  # type: sqlite3.Connection
 
     def create(self):
         with self.conn:
@@ -111,6 +206,8 @@ class SQLiteStorage(Storage):
                 "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (2, None, None, None, 0, None, None)
             )
+
+        self.create_or_exists_table_state()
 
     async def open(self):
         raise NotImplementedError

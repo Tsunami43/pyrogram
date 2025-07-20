@@ -7,6 +7,9 @@ RM := rm -rf
 
 .PHONY: venv clean-build clean-api clean api build tag dtag
 
+start:
+	$(PYTHON) main.py
+
 venv:
 	$(RM) $(VENV)
 	python3 -m venv $(VENV)
