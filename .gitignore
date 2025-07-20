@@ -1,6 +1,6 @@
 # Development
 docs
-*.session
+*.session*
 config.ini
 main.py
 unknown_errors.txt
