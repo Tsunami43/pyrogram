@@ -16,7 +16,6 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Pyrogram.  If not, see <http://www.gnu.org/licenses/>.
 
-from datetime import UTC, datetime
 import inspect
 import sqlite3
 import time
@@ -121,7 +120,7 @@ class State:
 
     @classmethod
     def default(cls, id: int):
-        return cls(id, 1, int(datetime.now(UTC).timestamp()), None, None)
+        return cls(id, 1, int(time.time()), None, None)
 
 
 
@@ -160,7 +159,7 @@ class StateMixin:
             seq (int): The sequence number.
         """
         if date is None:
-            date = int(datetime.now(UTC).timestamp())
+            date = int(int(time.time()))
         query = """
             REPLACE INTO state (id, pts, qts, date, seq)
             VALUES (?, ?, ?, ?, ?)
