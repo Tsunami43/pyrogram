@@ -177,7 +177,13 @@ class Client(Methods):
             Set the maximum amount of concurrent transmissions (uploads & downloads).
             A value that is too high may result in network related issues.
             Defaults to 1.
-    """
+
+        skip_updates (``bool``, *optional*):
+            Pass True to skip updates.
+            When updates are skipped the client can't receive messages or other updates.
+            Useful for batch programs that don't need to deal with updates.
+            Defaults to False (updates enabled and received).
+        """
 
     APP_VERSION = f"Pyrogram {__version__}"
     DEVICE_MODEL = f"{platform.python_implementation()} {platform.python_version()}"
@@ -225,7 +231,8 @@ class Client(Methods):
         takeout: bool = None,
         sleep_threshold: int = Session.SLEEP_THRESHOLD,
         hide_password: bool = False,
-        max_concurrent_transmissions: int = MAX_CONCURRENT_TRANSMISSIONS
+        max_concurrent_transmissions: int = MAX_CONCURRENT_TRANSMISSIONS,
+        skip_updates: bool = True
     ):
         super().__init__()
 
@@ -254,6 +261,7 @@ class Client(Methods):
         self.sleep_threshold = sleep_threshold
         self.hide_password = hide_password
         self.max_concurrent_transmissions = max_concurrent_transmissions
+        self.skip_updates = skip_updates
 
         self.executor = ThreadPoolExecutor(self.workers, thread_name_prefix="Handler")
 
@@ -553,8 +561,16 @@ class Client(Methods):
                     ), "channel_id", None
                 ) or getattr(update, "channel_id", None)
 
-                pts = getattr(update, "pts", None)
+                pts = getattr(update, "pts")
                 pts_count = getattr(update, "pts_count", None)
+
+                
+                self.storage.update_state(
+                    id=utils.get_channel_id(channel_id) if channel_id else 0,
+                    pts=pts,
+                    date=updates.date,
+                    seq=updates.seq,
+                )
 
                 if isinstance(update, raw.types.UpdateChannelTooLong):
                     log.info(update)
@@ -579,6 +595,9 @@ class Client(Methods):
                             )
                         except ChannelPrivate:
                             pass
+                        except Exception as e: # TODO
+                            log.exception(e)
+
                         else:
                             if not isinstance(diff, raw.types.updates.ChannelDifferenceEmpty):
                                 users.update({u.id: u for u in diff.users})
@@ -586,6 +605,11 @@ class Client(Methods):
 
                 self.dispatcher.updates_queue.put_nowait((update, users, chats))
         elif isinstance(updates, (raw.types.UpdateShortMessage, raw.types.UpdateShortChatMessage)):
+            self.storage.update_state(
+                    id=0,
+                    pts=updates.pts,
+                    date=updates.date,
+            )
             diff = await self.invoke(
                 raw.functions.updates.GetDifference(
                     pts=updates.pts - updates.pts_count,
