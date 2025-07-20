@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Pyrogram.  If not, see <http://www.gnu.org/licenses/>.
 
+from datetime import UTC, datetime
 import inspect
 import sqlite3
 import time
@@ -118,13 +119,19 @@ class State:
         self.date = date
         self.seq = seq
 
+    @classmethod
+    def default(cls, id: int):
+        return cls(id, 1, int(datetime.now(UTC).timestamp()), None, None)
+
+
 
 class StateMixin:
     conn: sqlite3.Connection
 
-    def get_state(self, id: int) -> Optional[State]:
+    def get_state(self, id: int) -> State:
         """
         Fetch a specific state by ID from the database.
+        If the state is not found, a default state is returned.
 
         Args:
             id (int): The ID of the state to retrieve.
@@ -132,16 +139,16 @@ class StateMixin:
         Returns:
             Optional[State]: A State object if found, otherwise None.
         """
-        query = "SELECT id, pts, qts, date, seq FROM state WHERE id = ?"
+        query = "SELECT id, pts, date, qts, seq FROM state WHERE id = ?"
         cursor = self.conn.execute(query, (id,))
         row = cursor.fetchone()
 
         if row is None:
-            return None
+            return State.default(id)
 
         return State(*row)
 
-    def update_state(self, id: int, pts: int, date: int, qts: Optional[int] = None,  seq: Optional[int] = None):
+    def update_state(self, id: int, pts: int, date: Optional[int], qts: Optional[int] = None,  seq: Optional[int] = None):
         """
         Insert or update a state entry using REPLACE INTO (upsert behavior).
 
@@ -152,6 +159,8 @@ class StateMixin:
             date (int): The date value (e.g., Unix timestamp).
             seq (int): The sequence number.
         """
+        if date is None:
+            date = int(datetime.now(UTC).timestamp())
         query = """
             REPLACE INTO state (id, pts, qts, date, seq)
             VALUES (?, ?, ?, ?, ?)

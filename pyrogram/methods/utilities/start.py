@@ -71,6 +71,10 @@ class Start:
             raise
         else:
             self.me = await self.get_me()
+
+            if not self.skip_updates:
+                await self.recover_updates()
+
             await self.initialize()
 
             return self
