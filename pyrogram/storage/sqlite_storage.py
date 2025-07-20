@@ -48,15 +48,6 @@ CREATE TABLE peers
     last_update_on INTEGER NOT NULL DEFAULT (CAST(STRFTIME('%s', 'now') AS INTEGER))
 );
 
-CREATE TABLE state
-(
-    id   INTEGER PRIMARY KEY,
-    pts  INTEGER,
-    qts  INTEGER,
-    date INTEGER,
-    seq  INTEGER
-);
-
 CREATE TABLE version
 (
     number INTEGER PRIMARY KEY
@@ -107,15 +98,15 @@ class State:
     Attributes:
         id (int): The ID of the state. (0 is me state)
         pts (int): The PTS value.
-        qts (int): The QTS value.
         date (int): The date value.
+        qts (int): The QTS value.
         seq (int): The SEQ value.
     """
     def __init__(self, id: int, pts: int, date: int, qts: Optional[int],  seq: Optional[int]):
         self.id = id 
         self.pts = pts
-        self.qts = qts
         self.date = date
+        self.qts = qts
         self.seq = seq
 
     @classmethod
@@ -126,6 +117,18 @@ class State:
 
 class StateMixin:
     conn: sqlite3.Connection
+
+    def create_or_exists_table_state(self):
+        with self.conn:
+            self.conn.executescript("""
+                CREATE TABLE IF NOT EXISTS state (
+                    id   INTEGER PRIMARY KEY,
+                    pts  INTEGER,
+                    date INTEGER,
+                    qts  INTEGER,
+                    seq  INTEGER
+                )
+            """)
 
     def get_state(self, id: int) -> State:
         """
@@ -154,17 +157,17 @@ class StateMixin:
         Args:
             id (int): The ID of the state.
             pts (int): The PTS value.
-            qts (int): The QTS value.
             date (int): The date value (e.g., Unix timestamp).
+            qts (int): The QTS value.
             seq (int): The sequence number.
         """
         if date is None:
             date = int(int(time.time()))
         query = """
-            REPLACE INTO state (id, pts, qts, date, seq)
+            REPLACE INTO state (id, pts, date, qts, seq)
             VALUES (?, ?, ?, ?, ?)
         """
-        self.conn.execute(query, (id, pts, qts, date, seq))
+        self.conn.execute(query, (id, pts, date, qts, seq))
         self.conn.commit()
 
     def reset_state(self, id: int):
@@ -203,6 +206,8 @@ class SQLiteStorage(Storage, StateMixin):
                 "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (2, None, None, None, 0, None, None)
             )
+
+        self.create_or_exists_table_state()
 
     async def open(self):
         raise NotImplementedError

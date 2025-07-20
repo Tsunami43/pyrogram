@@ -60,6 +60,7 @@ class FileStorage(SQLiteStorage):
         if not file_exists:
             self.create()
         else:
+            self.create_or_exists_table_state()
             self.update()
 
         with self.conn:
